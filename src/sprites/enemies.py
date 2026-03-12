@@ -135,9 +135,11 @@ class InimigoBase(pygame.sprite.Sprite):
 
 class InimigoRapido(InimigoBase):
     """Amarelo ácido: rápido, insectóide biomecânico — lâminas quitinosas."""
-    def __init__(self, pos_jogador, vel_base):
+    def __init__(self, pos_jogador, vel_base, hp=None):
+        if hp is None:
+            hp = 10
         super().__init__(pos_jogador, vel_base * 1.8,
-                         hp=10, cor=(200, 200, 0), tamanho=(22, 22), xp_valor=8)
+                         hp=hp, cor=(200, 200, 0), tamanho=(22, 22), xp_valor=8)
 
     def _desenhar_forma(self, w, h):
         """Inseto predador — corpo fusiforme com mandíbulas laterais."""
@@ -169,9 +171,11 @@ class InimigoRapido(InimigoBase):
 
 class InimigoTank(InimigoBase):
     """Vermelho escuro: golem biomecânico blindado — placas de quitina metálica."""
-    def __init__(self, pos_jogador, vel_base):
+    def __init__(self, pos_jogador, vel_base, hp=None):
+        if hp is None:
+            hp = 50
         super().__init__(pos_jogador, vel_base * 0.6,
-                         hp=50, cor=(160, 10, 10), tamanho=(48, 48), xp_valor=30)
+                         hp=hp, cor=(160, 10, 10), tamanho=(48, 48), xp_valor=30)
 
     def _desenhar_forma(self, w, h):
         """Golem blindado — múltiplas camadas de armadura orgânico-metálica."""
@@ -214,9 +218,11 @@ class InimigoTank(InimigoBase):
 
 class InimigoAtirador(InimigoBase):
     """Roxo: criatura biomecânica flutuante — olho central com tentáculos de energia."""
-    def __init__(self, pos_jogador, vel_base):
+    def __init__(self, pos_jogador, vel_base, hp=None):
+        if hp is None:
+            hp = 30
         super().__init__(pos_jogador, vel_base * 0.7,
-                         hp=30, cor=(170, 40, 255), tamanho=(34, 34), xp_valor=20)
+                         hp=hp, cor=(170, 40, 255), tamanho=(34, 34), xp_valor=20)
         self.ultimo_tiro = pygame.time.get_ticks()
         self.cadencia    = 2000
 
@@ -304,10 +310,11 @@ class InimigoViral(InimigoBase):
     Fragmentos têm metade do HP e não se dividem novamente.
     Usa flag `eh_fragmento` para evitar divisão recursiva.
     """
-    def __init__(self, pos_jogador, vel_base, eh_fragmento: bool = False):
+    def __init__(self, pos_jogador, vel_base, eh_fragmento: bool = False, hp=None):
         tamanho = (20, 20) if eh_fragmento else (32, 32)
-        hp      = 8       if eh_fragmento else 22
-        xp      = 6       if eh_fragmento else 18
+        if hp is None:
+            hp = 8 if eh_fragmento else 22
+        xp      = 6 if eh_fragmento else 18
         super().__init__(pos_jogador, vel_base * 1.1,
                          hp=hp, cor=(0, 230, 200), tamanho=tamanho, xp_valor=xp)
         self.eh_fragmento = eh_fragmento
@@ -345,6 +352,7 @@ class InimigoViral(InimigoBase):
         if self.eh_fragmento:
             return []
         frags = []
+        hp_frag = max(4, self.hp // 2)  # Metade do HP escalado da mãe
         for offset_x in (-15, 15):
             frag = InimigoViral.__new__(InimigoViral)
             # Inicializa como fragmento com posição ligeiramente deslocada
@@ -355,8 +363,8 @@ class InimigoViral(InimigoBase):
             frag.pos      = pygame.math.Vector2(self.pos.x + offset_x, self.pos.y)
             frag.rect     = frag.image.get_rect(center=frag.pos)
             frag.velocidade = self.velocidade * 1.3
-            frag.hp       = 8
-            frag.hp_max   = 8
+            frag.hp       = hp_frag
+            frag.hp_max   = hp_frag
             frag._flash_timer  = 0
             frag._img_original = frag.image.copy()
             frag._img_flash    = frag._criar_flash((20, 20))
@@ -372,9 +380,11 @@ class InimigoNecromante(InimigoBase):
     Pulsação verde ao curar — alerta visual.
     Mantém distância do jogador (kiting).
     """
-    def __init__(self, pos_jogador, vel_base):
+    def __init__(self, pos_jogador, vel_base, hp=None):
+        if hp is None:
+            hp = 35
         super().__init__(pos_jogador, vel_base * 0.65,
-                         hp=35, cor=(120, 0, 200), tamanho=(36, 36), xp_valor=35)
+                         hp=hp, cor=(120, 0, 200), tamanho=(36, 36), xp_valor=35)
         self._cura_timer    = pygame.time.get_ticks()
         self._cura_cd_ms    = 4000
         self._cura_pulsando = 0   # frames de flash verde ao curar
@@ -466,9 +476,11 @@ class InimigoExplosivo(InimigoBase):
     RAIO_EXPLOSAO = 90
     DANO_EXPLOSAO = 30
 
-    def __init__(self, pos_jogador, vel_base):
+    def __init__(self, pos_jogador, vel_base, hp=None):
+        if hp is None:
+            hp = 18
         super().__init__(pos_jogador, vel_base * 1.25,
-                         hp=18, cor=(255, 130, 0), tamanho=(28, 28), xp_valor=22)
+                         hp=hp, cor=(255, 130, 0), tamanho=(28, 28), xp_valor=22)
         self._explodiu = False
 
     def _desenhar_forma(self, w, h):

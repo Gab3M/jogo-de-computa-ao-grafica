@@ -29,6 +29,7 @@ from src.persistence   import SistemaPeristencia
 from src.controls      import ControladorEntrada
 from src.pause_menu    import MenuPausa
 from src.ui_components import BarraHP, BarraProgressao, ContadorTexto, PainelInfo
+from src.difficulty    import BalanceadorDificuldade
 
 from src.sprites.player  import Jogador
 from src.sprites.enemies import (InimigoBase, InimigoRapido, InimigoTank,
@@ -70,6 +71,9 @@ class Game:
         self.barra_hp      = BarraHP(30, 28)
         self.barra_xp      = BarraProgressao(30, 28 + 20 + 4, 260, 8, (30, 30, 40), XP_COLOR)
         self.contador_combo = ContadorTexto(LARGURA - 100, 60, 28)
+        
+        # Sistema de dificuldade
+        self.dificuldade   = BalanceadorDificuldade()
         
         self._poder_aviso_timer = 0
         self._poder_aviso_nome  = ""
@@ -191,7 +195,7 @@ class Game:
     def reset_total(self):
         self.vidas              = 3
         self.fase               = 1
-        self.vel_inimigos       = 2.5
+        self.vel_inimigos       = PLAYER_VEL * 0.4  # será atualizado pelo dificuldade system
         self.estado             = "jogando"
         self.aviso_fase_timer   = 0
         self.particulas         = GerenciadorParticulas()
@@ -204,6 +208,7 @@ class Game:
         self._poder_aviso_nome  = ""
         self.boss_intro.resetar()
         self.menu_up.ativo      = False
+        self.dificuldade.atualizar_fase(1)
         self.reset_fase()
         self.ondas.iniciar_fase(self.fase)
         # Cronômetro da run — ms acumulados somente quando jogando
@@ -468,7 +473,8 @@ class Game:
                 # Fase normal: avança
                 if self.fase < META_FASES:
                     self.fase            += 1
-                    self.vel_inimigos    += 0.4
+                    self.vel_inimigos    = self.dificuldade.get_velocidade_inimigos()
+                    self.dificuldade.atualizar_fase(self.fase)  # atualizar sistema de dificuldade
                     self.aviso_fase_timer = 120
                     self.camera.adicionar_shake(SHAKE_LEVEL_UP * 0.5)
                     self.particulas.transicao_fase(LARGURA, ALTURA)
@@ -618,6 +624,18 @@ class Game:
         """Cria um inimigo do tipo dado e adiciona aos grupos."""
         if self.boss_ativo or self.boss_intro.ativo:
             return
+        
+        # Mapa de HP base por tipo de inimigo
+        hp_base = {
+            "normal":     20,
+            "rapido":     10,
+            "tank":       50,
+            "atirador":   30,
+            "viral":      22,
+            "necromante": 35,
+            "explosivo":  18,
+        }
+        
         mapa = {
             "normal":     InimigoBase,
             "rapido":     InimigoRapido,
@@ -627,8 +645,18 @@ class Game:
             "necromante": InimigoNecromante,
             "explosivo":  InimigoExplosivo,
         }
-        cls  = mapa.get(tipo, InimigoBase)
-        novo = cls(self.player.pos, self.vel_inimigos)
+        
+        cls = mapa.get(tipo, InimigoBase)
+        
+        # Aplica scaling de dificuldade ao HP
+        hp_escalado = round(self.dificuldade.get_hp_inimigos(tipo))
+        
+        # Cria inimigo com HP escalado
+        if tipo == "viral":
+            novo = cls(self.player.pos, self.vel_inimigos, eh_fragmento=False, hp=hp_escalado)
+        else:
+            novo = cls(self.player.pos, self.vel_inimigos, hp=hp_escalado)
+        
         self.inimigos.add(novo)
         self.todos_sprites.add(novo)
 
