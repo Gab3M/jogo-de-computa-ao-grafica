@@ -104,15 +104,25 @@ class InimigoBase(pygame.sprite.Sprite):
             self.pos += direcao.normalize() * self.velocidade
         self.rect.center = self.pos
 
+    def _angulo_para(self, pos_jogador) -> float:
+        """Ângulo em graus apontando para o jogador."""
+        d = pos_jogador - self.pos
+        if d.length() > 0:
+            return -math.degrees(math.atan2(d.y, d.x))
+        return 0.0
+
     def update(self, pos_jogador, lista_disparos):
         self._mover_para(pos_jogador)
+        self._tick = getattr(self, "_tick", 0) + 1
 
-        # Gerencia hit flash
         if self._flash_timer > 0:
             self.image        = self._img_flash
             self._flash_timer -= 1
         else:
-            self.image        = self._img_original
+            # Rotação suave em direção ao jogador
+            angulo = self._angulo_para(pos_jogador)
+            self.image = pygame.transform.rotate(self._img_original, angulo)
+        self.rect = self.image.get_rect(center=self.pos)
 
 
 # ── Variações ─────────────────────────────────────────────────────────
@@ -268,9 +278,11 @@ class InimigoAtirador(InimigoBase):
                     "tipo": "inimigo",
                 })
 
-        # Hit flash
+        # Hit flash + rotação em direção ao jogador
         if self._flash_timer > 0:
             self.image        = self._img_flash
             self._flash_timer -= 1
         else:
-            self.image        = self._img_original
+            angulo     = self._angulo_para(pos_jogador)
+            self.image = pygame.transform.rotate(self._img_original, angulo)
+        self.rect = self.image.get_rect(center=self.pos)

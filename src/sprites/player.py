@@ -54,6 +54,10 @@ class Jogador(pygame.sprite.Sprite):
         # Tiro duplo (upgrade)
         self.tiro_duplo = False
 
+        # Muzzle flash — pisca na boca do canhão ao disparar
+        self._muzzle_timer = 0   # frames restantes de flash (3 frames)
+        self._muzzle_pos   = pygame.math.Vector2(0, 0)   # posição no mundo
+
         # HP Delayed (barra amarela atrás da barra de HP — Dark Souls style)
         self._hp_delayed  = float(self.hp)
         self._DELAYED_VEL = 0.5   # pixels de HP que a barra amarela perde por frame
@@ -209,6 +213,9 @@ class Jogador(pygame.sprite.Sprite):
         # Reconstrói imagem se a arma mudou (borda colorida)
         self._reconstruir_se_arma_mudou()
 
+        # Tick de animação para pulso do núcleo
+        self._tick = getattr(self, "_tick", 0) + 1
+
         teclas  = pygame.key.get_pressed()
         direcao = pygame.math.Vector2(0, 0)
 
@@ -217,21 +224,15 @@ class Jogador(pygame.sprite.Sprite):
         if teclas[pygame.K_a]: direcao.x -= 1
         if teclas[pygame.K_d]: direcao.x += 1
 
-        # Calcula velocidade alvo: normalizada * velocidade_max (ou zero se parado)
         vel_alvo = direcao.normalize() * self.velocidade if direcao.length() > 0 \
                    else pygame.math.Vector2(0, 0)
-
-        # LERP: interpola vel_atual em direção a vel_alvo.
         self._vel_atual += (vel_alvo - self._vel_atual) * self._ACEL
         self.pos        += self._vel_atual
-
         self.rect.center = self.pos
 
-        # Decrementa i-frames
         if self._iframe_timer > 0:
             self._iframe_timer -= 1
 
-        # Atualiza HP delayed: decai em direção ao HP real
         if self._hp_delayed > self.hp:
             self._hp_delayed = max(self.hp, self._hp_delayed - self._DELAYED_VEL)
 
@@ -239,33 +240,62 @@ class Jogador(pygame.sprite.Sprite):
         mouse_pos   = pygame.math.Vector2(pygame.mouse.get_pos())
         centro_tela = pygame.math.Vector2(LARGURA // 2, ALTURA // 2)
         delta       = mouse_pos - centro_tela
-        if delta.length() > 1:
-            # atan2 retorna ângulo em relação ao eixo X; pygame.transform.rotate
-            # gira no sentido anti-horário, mas atan2 usa coordenadas de tela (y invertido)
-            angulo = -math.degrees(math.atan2(delta.y, delta.x))
-            img_base = self._img_base
-        else:
-            angulo   = 0
-            img_base = self._img_base
+        angulo      = -math.degrees(math.atan2(delta.y, delta.x)) if delta.length() > 1 else 0
+        img_base    = self._img_base
 
-        # Visual: hit flash → pisca (i-frames) → rotação normal
+        # ── Pulso do núcleo: overlay animado sobre img_base ─────────────
+        # Um círculo semitransparente que pulsa no centro
+        pulso_sin  = math.sin(self._tick * 0.14)   # -1 → 1 em ~45 frames
+        pulso_r    = int(4 + 2 * pulso_sin)
+        pulso_alp  = int(100 + 80 * pulso_sin)
+
+        # Cor do pulso varia com o poder ativo
+        if getattr(self, "_frenesim_ativo", False):
+            pulso_cor = (255, 200, 0, pulso_alp)
+        elif getattr(self, "_escudo_ativo", False):
+            pulso_cor = (0, 255, 150, pulso_alp)
+        elif getattr(self, "_overload_ativo", False):
+            pulso_cor = (255, 60, 60, pulso_alp)
+        else:
+            # Cor normal da arma
+            arma = getattr(self, "tipo_arma", "Pistola")
+            if arma == "Metralhadora":
+                pulso_cor = (255, 210, 0, pulso_alp)
+            elif arma == "Shotgun":
+                pulso_cor = (190, 60, 255, pulso_alp)
+            else:
+                pulso_cor = (80, 255, 180, pulso_alp)
+
+        W        = img_base.get_width()
+        cx = cy  = W // 2
+        img_anim = img_base.copy()
+        ovl      = pygame.Surface((W, W), pygame.SRCALPHA)
+        pygame.draw.circle(ovl, pulso_cor, (cx, cy), pulso_r)
+        img_anim.blit(ovl, (0, 0))
+
+        # ── Anel de escudo visível ao redor do mech ──────────────────────
+        if getattr(self, "_escudo_ativo", False):
+            r_escudo = W // 2 + 3
+            pygame.draw.circle(img_anim, (0, 255, 160, 180), (cx, cy), r_escudo, width=2)
+
+        # Visual: hit flash → pisca (i-frames) → animado normal
         if self._flash_timer > 0:
             self.image        = pygame.transform.rotate(self._img_flash, angulo)
             self._flash_timer -= 1
         elif self._iframe_timer > 0 and (self._iframe_timer // 6) % 2 == 0:
-            img_pisca = img_base.copy()
+            img_pisca = img_anim.copy()
             img_pisca.set_alpha(120)
             self.image = pygame.transform.rotate(img_pisca, angulo)
         else:
-            self.image = pygame.transform.rotate(img_base, angulo)
+            self.image = pygame.transform.rotate(img_anim, angulo)
 
-        # Atualiza rect para o novo tamanho após rotação
         self.rect = self.image.get_rect(center=self.pos)
 
     def atirar(self):
         """
-        Retorna lista de (direcao, tipo_bala).
+        Retorna lista de (direcao, tipo_bala, origem).
         Suporta tiro duplo como upgrade.
+        Ativa muzzle flash na boca do canhão.
         """
         mouse_pos   = pygame.math.Vector2(pygame.mouse.get_pos())
         centro_tela = pygame.math.Vector2(LARGURA // 2, ALTURA // 2)
@@ -277,6 +307,10 @@ class Jogador(pygame.sprite.Sprite):
         dir_base = dir_base.normalize()
         disparos = []
 
+        # Posição da boca do canhão (aprox. 28px à frente do centro)
+        self._muzzle_pos   = pygame.math.Vector2(self.pos) + dir_base * 28
+        self._muzzle_timer = 4   # frames de brilho
+
         if self.tipo_arma == "Shotgun":
             angulos = [-15, 0, 15]
             for ang in angulos:
@@ -285,7 +319,6 @@ class Jogador(pygame.sprite.Sprite):
         elif self.tipo_arma == "Metralhadora":
             disparos.append((dir_base, "metralhadora", pygame.math.Vector2(self.pos)))
             if self.tiro_duplo:
-                # Segundo cano com offset perpendicular real de 8px
                 perp   = pygame.math.Vector2(-dir_base.y, dir_base.x) * 8
                 origem = pygame.math.Vector2(self.pos) + perp
                 disparos.append((dir_base, "metralhadora", origem))

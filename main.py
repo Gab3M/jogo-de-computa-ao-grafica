@@ -22,6 +22,7 @@ from src.damage_numbers import GerenciadorNumeroDano
 from src.boss_intro    import BossIntro
 from src.waves         import GerenciadorOndas
 from src.score         import GerenciadorScore
+from src.poder_especial import GerenciadorPoderEspecial
 
 from src.sprites.player  import Jogador
 from src.sprites.enemies import InimigoBase, InimigoRapido, InimigoTank, InimigoAtirador
@@ -44,13 +45,16 @@ class Game:
         self.fonte_md = pygame.font.SysFont("Arial", 36, bold=True)
 
         # Sub-sistemas
-        self.camera     = Camera()
-        self.particulas = GerenciadorParticulas()
-        self.menu_up    = MenuUpgrade(LARGURA, ALTURA)
-        self.nums_dano  = GerenciadorNumeroDano()
-        self.boss_intro = BossIntro(LARGURA, ALTURA, self.camera)
-        self.ondas      = GerenciadorOndas()
-        self.score      = GerenciadorScore()
+        self.camera        = Camera()
+        self.particulas    = GerenciadorParticulas()
+        self.menu_up       = MenuUpgrade(LARGURA, ALTURA)
+        self.nums_dano     = GerenciadorNumeroDano()
+        self.boss_intro    = BossIntro(LARGURA, ALTURA, self.camera)
+        self.ondas         = GerenciadorOndas()
+        self.score         = GerenciadorScore()
+        self.poder_esp     = GerenciadorPoderEspecial()
+        self._poder_aviso_timer = 0
+        self._poder_aviso_nome  = ""
 
         self.rodando    = True
         self._morte_timer = 0
@@ -84,6 +88,88 @@ class Game:
         self.SPAWN_EVENTO = pygame.USEREVENT + 1
         pygame.time.set_timer(self.SPAWN_EVENTO, 800)
 
+    # ── Paletas biomecânicas por fase ────────────────────────────────
+    _BIO_PALETAS = [
+        # Fase 1 — Floresta orgânica viva: verde bioluminescente
+        {
+            "fundo":  (5, 15, 8),
+            "longe":  [(0,200,90),(0,160,70),(20,180,60)],
+            "medio":  [(0,140,60),(0,180,80),(20,160,50)],
+            "perto":  [(0,220,100),(0,180,80),(30,200,70)],
+            "veias":  [(0,90,45),(0,70,35),(10,100,40)],
+            "n_nod":  55, "n_fil": 45, "n_veia": 18,
+        },
+        # Fase 2 — Tecido nervoso: verde-ciano elétrico
+        {
+            "fundo":  (5, 14, 16),
+            "longe":  [(0,180,160),(0,140,180),(20,160,140)],
+            "medio":  [(0,140,140),(0,160,180),(10,120,160)],
+            "perto":  [(0,200,180),(0,160,200),(20,180,160)],
+            "veias":  [(0,80,80),(0,60,100),(10,90,70)],
+            "n_nod":  60, "n_fil": 50, "n_veia": 20,
+        },
+        # Fase 3 — Infecção: roxo-verde ácido
+        {
+            "fundo":  (10, 6, 18),
+            "longe":  [(120,0,180),(80,0,160),(100,20,140)],
+            "medio":  [(100,0,160),(80,20,180),(60,0,140)],
+            "perto":  [(160,0,220),(120,0,200),(100,20,180)],
+            "veias":  [(60,0,100),(50,0,80),(70,10,90)],
+            "n_nod":  65, "n_fil": 55, "n_veia": 22,
+        },
+        # Fase 4 — Necrose profunda: roxo sombrio denso
+        {
+            "fundo":  (14, 4, 20),
+            "longe":  [(160,0,200),(140,0,180),(120,20,160)],
+            "medio":  [(140,0,180),(120,0,200),(100,0,160)],
+            "perto":  [(200,0,240),(160,0,220),(140,20,200)],
+            "veias":  [(80,0,120),(70,0,100),(90,10,110)],
+            "n_nod":  70, "n_fil": 60, "n_veia": 25,
+        },
+        # Fase 5 (boss) — Entropia biomecânica: vermelho-magenta apocalíptico
+        {
+            "fundo":  (20, 3, 14),
+            "longe":  [(200,0,80),(180,0,60),(160,20,50)],
+            "medio":  [(180,0,60),(160,0,80),(140,0,50)],
+            "perto":  [(240,0,100),(200,0,80),(180,20,70)],
+            "veias":  [(120,0,50),(100,0,40),(110,10,45)],
+            "n_nod":  80, "n_fil": 70, "n_veia": 30,
+        },
+    ]
+
+    def _gerar_bio_fase(self, fase: int):
+        """Regenera elementos do background com paleta e densidade da fase."""
+        import random as _r
+        idx = min(fase - 1, len(self._BIO_PALETAS) - 1)
+        p   = self._BIO_PALETAS[idx]
+
+        self._bio_longe = [
+            (_r.uniform(0, LARGURA), _r.uniform(0, ALTURA),
+             _r.randint(1, 3), _r.choice(p["longe"]))
+            for _ in range(p["n_nod"])
+        ]
+        self._bio_medio = [
+            (_r.uniform(0, LARGURA), _r.uniform(0, ALTURA),
+             _r.uniform(0, math.tau), _r.randint(15, 45),
+             _r.choice(p["medio"]))
+            for _ in range(p["n_fil"])
+        ]
+        self._bio_perto = [
+            (_r.uniform(0, LARGURA * 3) - LARGURA,
+             _r.uniform(0, ALTURA * 3) - ALTURA,
+             _r.randint(4, 11), _r.choice(p["perto"]))
+            for _ in range(60)
+        ]
+        self._veias = [
+            (_r.uniform(-200, LARGURA + 200),
+             _r.uniform(-200, ALTURA + 200),
+             _r.uniform(0, math.tau),
+             _r.randint(80, 260),
+             _r.choice(p["veias"]))
+            for _ in range(p["n_veia"])
+        ]
+        self._bio_fundo = p["fundo"]
+
     def reset_total(self):
         self.vidas              = 3
         self.fase               = 1
@@ -95,40 +181,11 @@ class Game:
         self.nums_dano          = GerenciadorNumeroDano()
         self.score.reset()
         self.ondas              = GerenciadorOndas()
-        # ── Background biomecânico: elementos gerados uma vez ────────────
-        import random as _r
-        # Camada 0: esporos/células flutuantes distantes (movimento lentíssimo)
-        self._bio_longe = [
-            (_r.uniform(0, LARGURA), _r.uniform(0, ALTURA),
-             _r.randint(1, 3), _r.choice([(0,180,80,60),(100,0,180,50),(0,140,100,40)]))
-            for _ in range(70)
-        ]
-        # Camada 1: filamentos/nervos médios
-        self._bio_medio = [
-            (_r.uniform(0, LARGURA), _r.uniform(0, ALTURA),
-             _r.uniform(0, math.tau),          # ângulo do filamento
-             _r.randint(15, 40),               # comprimento
-             _r.choice([(0,120,60),(80,0,140),(0,160,80),(60,0,120)]))
-            for _ in range(50)
-        ]
-        # Camada 2: nódulos/glândulas próximos (com o mundo)
-        self._bio_perto = [
-            (_r.uniform(0, LARGURA * 3) - LARGURA, _r.uniform(0, ALTURA * 3) - ALTURA,
-             _r.randint(4, 10),
-             _r.choice([(0,200,100),(120,0,200),(0,180,120),(100,0,180)]))
-            for _ in range(60)
-        ]
-        # Veias do grid: linhas orgânicas cruzando o mapa
-        self._veias = []
-        for _ in range(20):
-            x0 = _r.uniform(-200, LARGURA + 200)
-            y0 = _r.uniform(-200, ALTURA + 200)
-            ang = _r.uniform(0, math.tau)
-            comp = _r.randint(80, 250)
-            cor = _r.choice([(0,80,40),(60,0,100),(0,100,60),(40,0,80)])
-            self._veias.append((x0, y0, ang, comp, cor))
+        self._gerar_bio_fase(1)
+        self.poder_esp          = GerenciadorPoderEspecial()
+        self._poder_aviso_timer = 0
+        self._poder_aviso_nome  = ""
         self.boss_intro.resetar()
-        # BUG 5 FIX: reseta o menu junto com tudo mais
         self.menu_up.ativo      = False
         self.reset_fase()
         self.ondas.iniciar_fase(self.fase)
@@ -157,6 +214,15 @@ class Game:
                 if self.estado == "game_over" and evento.key == pygame.K_r:
                     self.estado = "jogando"
                     self.reset_total()
+
+                # ESPAÇO: ativa poder especial
+                if evento.key == pygame.K_SPACE and self.estado == "jogando":
+                    nome = self.poder_esp.ativar(
+                        self.player, self.inimigos,
+                        self.particulas, self.camera)
+                    if nome:
+                        self._poder_aviso_nome  = f"⚡ {nome} ATIVADO!"
+                        self._poder_aviso_timer = 120
 
                 # Q: sair a qualquer momento
                 if evento.key == pygame.K_q:
@@ -200,6 +266,23 @@ class Game:
 
         # ── 1. Jogador ──────────────────────────────────────────────
         self.player.update()
+        self.poder_esp.update(self.player)
+
+        # ── Efeitos dos poderes especiais ativos ─────────────────────
+        if getattr(self.player, "_frenesim_ativo", False):
+            self.player.velocidade = PLAYER_VEL * 1.8
+        elif getattr(self.player, "_overload_ativo", False):
+            self.player.velocidade = PLAYER_VEL * 1.5
+        else:
+            self.player.velocidade = PLAYER_VEL
+
+        # I-frames garantidos enquanto escudo ativo
+        if getattr(self.player, "_escudo_ativo", False):
+            self.player._iframe_timer = 10
+
+        # Aviso de poder na tela
+        if self._poder_aviso_timer > 0:
+            self._poder_aviso_timer -= 1
 
         # ── 1b. Regen de vida (upgrade Nanobots) ────────────────────
         if getattr(self.player, "regen_ativo", False):
@@ -226,6 +309,13 @@ class Game:
                 self.aviso_fase_timer = 120
                 self.camera.adicionar_shake(SHAKE_LEVEL_UP * 0.5)
                 self.particulas.transicao_fase(LARGURA, ALTURA)
+                self._gerar_bio_fase(self.fase)
+                # Desbloqueia poder especial a cada 2 fases concluídas
+                if (self.fase - 1) % 2 == 0:
+                    info = self.poder_esp.desbloquear(self.fase - 1)
+                    if info:
+                        self._poder_aviso_nome  = f"PODER DESBLOQUEADO: {info['icone']} {info['nome']}"
+                        self._poder_aviso_timer = 240  # 4 segundos
                 self.ondas.iniciar_fase(self.fase)
             elif self.fase == BOSS_FASE_INICIO and not self.boss_ativo and not self.boss_intro.ativo:
                 # Fase 5: inicia a cinematica do boss
@@ -234,7 +324,11 @@ class Game:
         # ── 2. Tiro do Jogador ──────────────────────────────────────
         if pygame.mouse.get_pressed()[0]:
             agora = pygame.time.get_ticks()
-            if agora - self.player.ultimo_tiro > self.player.cadencia:
+            # Frenesim/Overload: cadência reduzida pela metade
+            mult_cad = 0.5 if (getattr(self.player, "_frenesim_ativo", False)
+                               or getattr(self.player, "_overload_ativo", False)) else 1.0
+            cadencia_ef = int(self.player.cadencia * mult_cad)
+            if agora - self.player.ultimo_tiro > cadencia_ef:
                 self.player.ultimo_tiro = agora
                 disparos = self.player.atirar()
                 for direcao, tipo, origem in disparos:
@@ -287,19 +381,23 @@ class Game:
         """
         Cria projétil do jogador respeitando dano_bala em TODAS as armas.
         Aplica upgrade bala_larga (projétil 2× maior) quando ativo.
+        Overload: dano dobrado enquanto ativo.
         """
         pos   = origem if origem is not None else self.player.pos
         larga = getattr(self.player, "bala_larga", False)
+        dano  = self.player.dano_bala
+        if getattr(self.player, "_overload_ativo", False):
+            dano = int(dano * 2)
 
         if tipo == "metralhadora":
             tam = (12, 12) if larga else (6, 6)
-            return BalaMetralhadora(pos, direcao, dano=self.player.dano_bala, tamanho=tam)
+            return BalaMetralhadora(pos, direcao, dano=dano, tamanho=tam)
         if tipo == "shotgun":
             tam = (18, 18) if larga else (10, 10)
-            return BalaShotgun(pos, direcao, dano=self.player.dano_bala, tamanho=tam)
+            return BalaShotgun(pos, direcao, dano=dano, tamanho=tam)
         # Pistola padrão
         tam = (16, 16) if larga else (8, 8)
-        return Bala(pos, direcao, AZUL_TIRO, dano=self.player.dano_bala, tamanho=tam)
+        return Bala(pos, direcao, AZUL_TIRO, dano=dano, tamanho=tam)
 
     def _processar_disparo_inimigo(self, pedido):
         pos  = pedido["pos"]
@@ -384,14 +482,24 @@ class Game:
                         break
 
         # ── 3. Inimigos → Jogador (contato) ─────────────────────────
-        if pygame.sprite.spritecollide(self.player, self.inimigos, True):
-            dano = 20
-            self.player.sofrer_dano(dano)
-            if not self.player.esta_invencivel():  # só mostra se dano foi aplicado
-                self.nums_dano.adicionar(self.player.pos, dano, eh_jogador=True)
-                self.score.registrar_dano()   # quebra o combo
-            self.camera.adicionar_shake(SHAKE_CONTATO_INIMIGO)
-            self._verificar_morte_jogador()
+        inimigos_tocando = pygame.sprite.spritecollide(self.player, self.inimigos, False)
+        for ini in inimigos_tocando:
+            # Escudo ativo: inimigo toma dano de contato em vez do jogador
+            if getattr(self.player, "_escudo_ativo", False):
+                ini.sofrer_dano(40)
+                if ini.hp <= 0:
+                    self._matar_inimigo(ini)
+                    ini.kill()
+                self.camera.adicionar_shake(0.3)
+            else:
+                ini.kill()
+                dano = 20
+                self.player.sofrer_dano(dano)
+                if not self.player.esta_invencivel():
+                    self.nums_dano.adicionar(self.player.pos, dano, eh_jogador=True)
+                    self.score.registrar_dano()
+                self.camera.adicionar_shake(SHAKE_CONTATO_INIMIGO)
+                self._verificar_morte_jogador()
 
         # ── 4. Balas inimigas → Jogador ──────────────────────────────
         for bala in list(self.balas_inimigos):
@@ -497,17 +605,8 @@ class Game:
     # ═══════════════════════════════════════════════════════════════
 
     def desenhar(self):
-        # Cor de fundo varia por fase — paleta BIOMECÂNICA
-        # verde tóxico profundo → roxo sombrio → preto orgânico
-        _CORES_FUNDO = [
-            (5,  15,  8),    # fase 1 — verde floresta profundo
-            (6,  12,  14),   # fase 2 — verde-azulado orgânico
-            (10, 6,   16),   # fase 3 — transição para roxo
-            (14, 4,   18),   # fase 4 — roxo escuro ameaçador
-            (18, 3,   12),   # fase 5 — roxo-sangue boss
-        ]
-        idx_cor = min(self.fase - 1, len(_CORES_FUNDO) - 1)
-        self.tela.fill(_CORES_FUNDO[idx_cor])
+        # Cor de fundo vem da paleta da fase atual (gerada em _gerar_bio_fase)
+        self.tela.fill(getattr(self, "_bio_fundo", (5, 15, 8)))
         offset = self.camera.offset
 
         # ── Grid ─────────────────────────────────────────────────────
@@ -530,12 +629,40 @@ class Game:
         centro = (LARGURA // 2, ALTURA // 2)
         self.tela.blit(self.player.image, self.player.image.get_rect(center=centro))
 
+        # ── Muzzle flash (boca do canhão) ────────────────────────────
+        if self.player._muzzle_timer > 0:
+            self.player._muzzle_timer -= 1
+            t   = self.player._muzzle_timer
+            r   = 6 + t * 3              # raio decrescente
+            alp = t * 60                 # fade out
+            pos_tela = self.player._muzzle_pos + offset
+            mf = pygame.Surface((r*2+2, r*2+2), pygame.SRCALPHA)
+            # Anel externo
+            pygame.draw.circle(mf, (*AMARELO, alp), (r+1, r+1), r)
+            # Núcleo branco
+            pygame.draw.circle(mf, (255, 255, 255, min(255, alp + 80)),
+                               (r+1, r+1), max(1, r // 2))
+            self.tela.blit(mf, mf.get_rect(center=(int(pos_tela.x),
+                                                     int(pos_tela.y))))
+
         # ── Barra de vida do Boss ─────────────────────────────────────
         if self.boss_ativo and self.boss_ref:
             self.boss_ref.desenhar_barra_vida(self.tela)
 
         # ── HUD ───────────────────────────────────────────────────────
         self._desenhar_hud()
+
+        # ── HUD do poder especial ─────────────────────────────────────
+        self.poder_esp.desenhar_hud(self.tela)
+
+        # ── Aviso de poder desbloqueado/ativado ───────────────────────
+        if self._poder_aviso_timer > 0:
+            alpha = min(255, self._poder_aviso_timer * 8)
+            txt   = self.fonte_md.render(self._poder_aviso_nome, True, (100, 255, 200))
+            txt.set_alpha(alpha)
+            rx = LARGURA // 2 - txt.get_width() // 2
+            ry = ALTURA // 2 + 80
+            self.tela.blit(txt, (rx, ry))
 
         # ── Cinematica do Boss (sobrepõe tudo exceto o cursor) ────────
         self.boss_intro.desenhar(self.tela)
