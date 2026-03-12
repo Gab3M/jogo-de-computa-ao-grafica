@@ -27,6 +27,7 @@ from src.sound         import GerenciadorSom
 from src.menu_principal import MenuPrincipal
 from src.persistence   import SistemaPeristencia
 from src.controls      import ControladorEntrada
+from src.pause_menu    import MenuPausa
 
 from src.sprites.player  import Jogador
 from src.sprites.enemies import (InimigoBase, InimigoRapido, InimigoTank,
@@ -61,6 +62,7 @@ class Game:
         self.poder_esp     = GerenciadorPoderEspecial()
         self.som           = GerenciadorSom()
         self.menu          = MenuPrincipal(LARGURA, ALTURA)   # ← tela de título
+        self.menu_pausa    = MenuPausa(LARGURA, ALTURA)       # ← menu de pausa
         self.controles     = ControladorEntrada()  # ← controle (teclado + gamepad)
         self._poder_aviso_timer = 0
         self._poder_aviso_nome  = ""
@@ -266,22 +268,16 @@ class Game:
                 continue    # bloqueia o resto do loop de eventos
 
             if evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_ESCAPE and not self.menu_up.ativo:
+                if evento.key == pygame.K_ESCAPE and not self.menu_up.ativo and not self.menu_pausa.visivel:
                     if self.estado == "jogando":
                         self.estado = "pausado"
+                        self.menu_pausa.mostrar()
                     elif self.estado == "pausado":
                         self.estado = "jogando"
+                        self.menu_pausa.esconder()
 
-                # No pause: R reinicia, Q sai para o menu principal
-                if self.estado == "pausado":
-                    if evento.key == pygame.K_r:
-                        self.estado = "jogando"
-                        self.reset_total()
-                    elif evento.key == pygame.K_m:
-                        self._salvar_jogo()  # Salva antes de voltar ao menu
-                        self.estado = "jogando"
-                        self.reset_total()
-                        self.menu.ativo = True
+                # No pause: ações são processadas pelo menu de pausa agora
+                continue
 
                 # R: reinicia após game over ou vitória
                 if self.estado in ("game_over", "vitoria") and evento.key == pygame.K_r:
@@ -308,6 +304,25 @@ class Game:
                     self.estado = "jogando"
                     self.particulas.nivel_up_burst(self.player.pos)
                     self.camera.adicionar_shake(SHAKE_LEVEL_UP)
+            
+            # Menu de pausa captura seus próprios eventos
+            if self.menu_pausa.visivel:
+                acao = self.menu_pausa.processar_evento(evento)
+                if acao == "continuar":
+                    self.estado = "jogando"
+                    self.menu_pausa.esconder()
+                elif acao == "reiniciar":
+                    self.estado = "jogando"
+                    self.menu_pausa.esconder()
+                    self.reset_total()
+                elif acao == "menu":
+                    self._salvar_jogo()
+                    self.estado = "jogando"
+                    self.menu_pausa.esconder()
+                    self.reset_total()
+                    self.menu.ativo = True
+                elif acao == "sair":
+                    self.rodando = False
 
             # Spawn legado removido — o GerenciadorOndas controla os spawns agora
 
@@ -321,11 +336,13 @@ class Game:
             self.player._entrada_movimento = pygame.math.Vector2(0, 0)
         
         # Processar pausa pelo controlador
-        if entrada["pausa"] and not self.menu_up.ativo:
+        if entrada["pausa"] and not self.menu_up.ativo and not self.menu_pausa.visivel:
             if self.estado == "jogando":
                 self.estado = "pausado"
+                self.menu_pausa.mostrar()
             elif self.estado == "pausado":
                 self.estado = "jogando"
+                self.menu_pausa.esconder()
         
         # Processar poder pelo controlador
         if entrada["poder"] and self.estado == "jogando":
@@ -894,7 +911,7 @@ class Game:
             if self.menu_up.ativo:
                 self.menu_up.desenhar(self.tela)
             else:
-                self._desenhar_pause()
+                self.menu_pausa.desenhar(self.tela)
 
         pygame.display.flip()
 
