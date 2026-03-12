@@ -13,6 +13,18 @@ from src.config import *
 class Jogador(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
+
+        # ── Tamanho responsivo ───────────────────────────────────────────
+        # O boneco cresce a cada fase concluída e encolhe ao tomar dano.
+        # _tamanho_base  = tamanho alvo determinado pela fase
+        # _tamanho_atual = valor suavizado (interpola em direção ao base)
+        # Fórmula: base = PLAYER_SIZE + (fase - 1) * PLAYER_CRESCIMENTO_FASE
+        # Dano:    base sofre penalidade proporcional ao HP perdido
+        self.fase_atual           = 1
+        self._tamanho_base        = float(PLAYER_SIZE)
+        self._tamanho_atual       = float(PLAYER_SIZE)
+        self._LERP_TAMANHO        = 0.08   # suavidade da transição (0=lento, 1=instantâneo)
+
         # Sprite base (quadrado verde)
         self._construir_imagem()
 
@@ -64,7 +76,36 @@ class Jogador(pygame.sprite.Sprite):
 
     # ── Construção de sprite ──────────────────────────────────────────
 
-    def _construir_imagem(self):
+    def _calcular_tamanho_alvo(self) -> float:
+        """
+        Tamanho alvo = crescimento por fase + penalidade de HP.
+
+        Crescimento: +PLAYER_CRESCIMENTO_FASE px por fase concluída.
+        Penalidade : quando HP cai, o tamanho encolhe proporcionalmente.
+                     Com HP cheio → tamanho máximo da fase.
+                     Com HP zerado → teria tamanho mínimo (PLAYER_SIZE_MIN).
+        """
+        fase    = getattr(self, "fase_atual", 1)
+        hp      = getattr(self, "hp", HP_MAX)
+        hp_max  = getattr(self, "hp_max", HP_MAX)
+
+        # Tamanho base da fase (cresce com as fases)
+        tam_fase = PLAYER_SIZE + (fase - 1) * PLAYER_CRESCIMENTO_FASE
+
+        # Razão de HP: 1.0 = cheio, 0.0 = morto
+        ratio_hp = max(0.0, hp / hp_max) if hp_max > 0 else 1.0
+
+        # Encolhe linearmente conforme perde HP
+        # Com HP cheio → tam_fase; Com HP = 0 → PLAYER_SIZE_MIN
+        tam_alvo = PLAYER_SIZE_MIN + (tam_fase - PLAYER_SIZE_MIN) * ratio_hp
+
+        return max(float(PLAYER_SIZE_MIN), tam_alvo)
+
+    def atualizar_fase(self, nova_fase: int):
+        """Chamado por main.py ao avançar de fase — redefine o tamanho alvo."""
+        self.fase_atual = nova_fase
+
+    def _construir_imagem(self, tamanho_override: float = None):
         """
         Sprite de robô/mech humanóide top-down — estética biomecânica.
 
@@ -75,7 +116,7 @@ class Jogador(pygame.sprite.Sprite):
           • Detalhe de tubulação nos ombros
           • Borda de energia colorida por arma
         """
-        S = PLAYER_SIZE           # 50 px
+        S = int(tamanho_override) if tamanho_override else PLAYER_SIZE  # tamanho dinâmico
         self.image = pygame.Surface((S + 10, S + 10), pygame.SRCALPHA)
         W = S + 10
         cx, cy = W // 2, W // 2
@@ -176,9 +217,10 @@ class Jogador(pygame.sprite.Sprite):
         # Ajusta referência de tamanho para o novo canvas W×W
         self._W = W
 
-    def _criar_flash(self):
-        """Flash branco — mesmo tamanho do canvas do mech (S+10)."""
-        W = PLAYER_SIZE + 10
+    def _criar_flash(self, tamanho_override: float = None):
+        """Flash branco — mesmo tamanho do canvas atual do mech."""
+        S = int(tamanho_override) if tamanho_override else PLAYER_SIZE
+        W = S + 10
         surf = pygame.Surface((W, W), pygame.SRCALPHA)
         surf.fill((255, 255, 255, 200))
         return surf
@@ -200,7 +242,7 @@ class Jogador(pygame.sprite.Sprite):
     def sofrer_dano(self, valor):
         """
         Aplica dano SOMENTE se não estiver invencível.
-        Ativa hit flash e inicia os i-frames simultaneamente.
+        Ativa hit flash, i-frames e atualiza tamanho responsivo.
         """
         if self.esta_invencivel():
             return  # descarta o dano — i-frames ativos
@@ -208,10 +250,24 @@ class Jogador(pygame.sprite.Sprite):
         self.hp             -= valor
         self._flash_timer    = 8
         self._iframe_timer   = self.IFRAME_DURACAO
+        # Atualiza alvo de tamanho imediatamente ao tomar dano
+        self._tamanho_base   = self._calcular_tamanho_alvo()
 
     def update(self):
         # Reconstrói imagem se a arma mudou (borda colorida)
         self._reconstruir_se_arma_mudou()
+
+        # ── Tamanho responsivo: interpolação suave ao alvo ───────────────
+        # _tamanho_base é atualizado ao tomar dano e ao avançar de fase.
+        # _tamanho_atual interpola suavemente — transição visual fluida.
+        self._tamanho_base  = self._calcular_tamanho_alvo()
+        tam_anterior        = self._tamanho_atual
+        self._tamanho_atual += (self._tamanho_base - self._tamanho_atual) * self._LERP_TAMANHO
+
+        # Reconstrói o sprite quando o tamanho mudou de forma perceptível
+        if abs(self._tamanho_atual - tam_anterior) > 0.5:
+            self._construir_imagem(self._tamanho_atual)
+            self._img_flash = self._criar_flash(self._tamanho_atual)
 
         # Tick de animação para pulso do núcleo
         self._tick = getattr(self, "_tick", 0) + 1

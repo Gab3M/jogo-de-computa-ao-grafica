@@ -44,33 +44,76 @@ ONDAS = [
     {"inimigos": [("normal", 4), ("rapido", 3), ("tank", 1), ("atirador", 2)],
      "intervalo_ms": 800, "respiro_ms": 2000},
 
-    # Fase 5 — horda antes do boss
+    # Fase 5 — horda antes do boss KRONOS
     {"inimigos": [("normal", 6), ("rapido", 4), ("tank", 2), ("atirador", 2)],
      "intervalo_ms": 700, "respiro_ms": 1500},
 
-    # Fase 6+ → gerada dinamicamente (veja _gerar_onda_infinita)
+    # Fase 6 — introduz VIRAL (se divide ao morrer)
+    {"inimigos": [("normal", 4), ("rapido", 3), ("viral", 3), ("atirador", 2)],
+     "intervalo_ms": 750, "respiro_ms": 2000},
+
+    # Fase 7 — introduz EXPLOSIVO (rush + detonação em área)
+    {"inimigos": [("normal", 4), ("rapido", 2), ("explosivo", 4), ("tank", 1)],
+     "intervalo_ms": 700, "respiro_ms": 1800},
+
+    # Fase 8 — introduz NECROMANTE (cura aliados)
+    {"inimigos": [("normal", 5), ("rapido", 3), ("necromante", 2), ("viral", 2)],
+     "intervalo_ms": 650, "respiro_ms": 1800},
+
+    # Fase 9 — combinação pesada antes do boss EREBUS
+    {"inimigos": [("normal", 4), ("tank", 2), ("explosivo", 3), ("necromante", 2), ("atirador", 2)],
+     "intervalo_ms": 600, "respiro_ms": 1500},
+
+    # Fase 10 — boss EREBUS (gerado em main.py)
+    {"inimigos": [("normal", 3), ("rapido", 4), ("viral", 3), ("explosivo", 2)],
+     "intervalo_ms": 600, "respiro_ms": 1200},
+
+    # Fase 11 — reintrodução com dificuldade máxima
+    {"inimigos": [("normal", 5), ("rapido", 4), ("tank", 2), ("necromante", 2), ("explosivo", 3)],
+     "intervalo_ms": 580, "respiro_ms": 1500},
+
+    # Fase 12 — horda viral
+    {"inimigos": [("viral", 6), ("normal", 4), ("atirador", 3), ("tank", 2)],
+     "intervalo_ms": 550, "respiro_ms": 1200},
+
+    # Fase 13 — necromantes em pack
+    {"inimigos": [("normal", 4), ("rapido", 4), ("necromante", 3), ("explosivo", 3), ("tank", 2)],
+     "intervalo_ms": 500, "respiro_ms": 1200},
+
+    # Fase 14 — caos total antes do boss final
+    {"inimigos": [("normal", 5), ("rapido", 5), ("tank", 3), ("viral", 4),
+                  ("explosivo", 3), ("necromante", 2), ("atirador", 3)],
+     "intervalo_ms": 450, "respiro_ms": 1000},
+
+    # Fase 15 — boss NEMESIS (gerado em main.py)
+    {"inimigos": [("normal", 6), ("rapido", 5), ("tank", 2), ("viral", 3),
+                  ("explosivo", 3), ("necromante", 2)],
+     "intervalo_ms": 400, "respiro_ms": 800},
 ]
 
 
 def _gerar_onda_infinita(fase: int) -> dict:
-    """
-    Gera uma onda escalada para fases além das pré-definidas.
-    Aumenta a quantidade e reduz o intervalo gradualmente.
-    """
-    extra    = fase - len(ONDAS)          # quantas fases além do limite
-    base_n   = 5 + extra * 2              # inimigos normais
-    base_r   = 3 + extra                  # rápidos
-    base_t   = 1 + extra // 2             # tanks
-    base_a   = 2 + extra // 2             # atiradores
-    intervalo = max(400, 800 - extra * 40)
-    respiro   = max(1000, 2000 - extra * 100)
+    """Fases além de 15 — escala infinita para rejogabilidade."""
+    extra    = fase - len(ONDAS)
+    base_n   = 5 + extra * 2
+    base_r   = 3 + extra
+    base_t   = 1 + extra // 2
+    base_a   = 2 + extra // 2
+    base_v   = 2 + extra // 2
+    base_e   = 1 + extra // 3
+    base_nec = 1 + extra // 4
+    intervalo = max(350, 800 - extra * 40)
+    respiro   = max(800, 2000 - extra * 100)
 
     return {
         "inimigos": [
-            ("normal",   base_n),
-            ("rapido",   base_r),
-            ("tank",     base_t),
-            ("atirador", base_a),
+            ("normal",    base_n),
+            ("rapido",    base_r),
+            ("tank",      base_t),
+            ("atirador",  base_a),
+            ("viral",     base_v),
+            ("explosivo", base_e),
+            ("necromante",base_nec),
         ],
         "intervalo_ms": intervalo,
         "respiro_ms":   respiro,

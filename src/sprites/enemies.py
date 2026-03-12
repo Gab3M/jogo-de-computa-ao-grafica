@@ -286,3 +286,235 @@ class InimigoAtirador(InimigoBase):
             angulo     = self._angulo_para(pos_jogador)
             self.image = pygame.transform.rotate(self._img_original, angulo)
         self.rect = self.image.get_rect(center=self.pos)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  NOVOS INIMIGOS — Fase 6+
+# ══════════════════════════════════════════════════════════════════════
+
+class InimigoViral(InimigoBase):
+    """
+    Ciano bioluminescente: ao morrer se DIVIDE em 2 fragmentos menores.
+    Fragmentos têm metade do HP e não se dividem novamente.
+    Usa flag `eh_fragmento` para evitar divisão recursiva.
+    """
+    def __init__(self, pos_jogador, vel_base, eh_fragmento: bool = False):
+        tamanho = (20, 20) if eh_fragmento else (32, 32)
+        hp      = 8       if eh_fragmento else 22
+        xp      = 6       if eh_fragmento else 18
+        super().__init__(pos_jogador, vel_base * 1.1,
+                         hp=hp, cor=(0, 230, 200), tamanho=tamanho, xp_valor=xp)
+        self.eh_fragmento = eh_fragmento
+
+    def _desenhar_forma(self, w, h):
+        """Célula mitótica — bolha ciano com divisão visível no centro."""
+        cx, cy = w // 2, h // 2
+        r = min(w, h) // 2 - 1
+
+        # Membrana externa bioluminescente
+        pts = []
+        n = 14
+        for i in range(n):
+            a = math.radians(i * (360 / n))
+            jitter = 0.80 + 0.20 * math.sin(a * 5)
+            pts.append((cx + math.cos(a) * r * jitter,
+                        cy + math.sin(a) * r * jitter))
+        pygame.draw.polygon(self.image, (0, 60, 55), pts)
+        pygame.draw.polygon(self.image, (0, 180, 160), pts)
+        pygame.draw.polygon(self.image, (80, 255, 240), pts, width=1)
+
+        if not self.eh_fragmento:
+            # Linha de fissão no meio (indica que vai se dividir)
+            pygame.draw.line(self.image, (0, 255, 220),
+                             (cx, cy - r + 3), (cx, cy + r - 3), 1)
+
+        # Núcleo interno
+        pygame.draw.circle(self.image, (0, 100, 90), (cx, cy), max(2, r // 3))
+        pygame.draw.circle(self.image, (0, 255, 200), (cx, cy), max(1, r // 5))
+        # Reflexo
+        pygame.draw.circle(self.image, (200, 255, 250), (cx - r//4, cy - r//4), 1)
+
+    def gerar_fragmentos(self) -> list:
+        """Retorna lista com 2 fragmentos centrados na posição atual."""
+        if self.eh_fragmento:
+            return []
+        frags = []
+        for offset_x in (-15, 15):
+            frag = InimigoViral.__new__(InimigoViral)
+            # Inicializa como fragmento com posição ligeiramente deslocada
+            frag.cor      = (0, 230, 200)
+            frag.xp_valor = 6
+            frag.eh_fragmento = True
+            frag._construir_imagem((20, 20))
+            frag.pos      = pygame.math.Vector2(self.pos.x + offset_x, self.pos.y)
+            frag.rect     = frag.image.get_rect(center=frag.pos)
+            frag.velocidade = self.velocidade * 1.3
+            frag.hp       = 8
+            frag.hp_max   = 8
+            frag._flash_timer  = 0
+            frag._img_original = frag.image.copy()
+            frag._img_flash    = frag._criar_flash((20, 20))
+            pygame.sprite.Sprite.__init__(frag)
+            frag.image = frag._img_original.copy()
+            frags.append(frag)
+        return frags
+
+
+class InimigoNecromante(InimigoBase):
+    """
+    Roxo escuro: a cada 4 segundos cura os inimigos mais próximos em 8 HP.
+    Pulsação verde ao curar — alerta visual.
+    Mantém distância do jogador (kiting).
+    """
+    def __init__(self, pos_jogador, vel_base):
+        super().__init__(pos_jogador, vel_base * 0.65,
+                         hp=35, cor=(120, 0, 200), tamanho=(36, 36), xp_valor=35)
+        self._cura_timer    = pygame.time.get_ticks()
+        self._cura_cd_ms    = 4000
+        self._cura_pulsando = 0   # frames de flash verde ao curar
+
+    def _desenhar_forma(self, w, h):
+        """Feiticeiro fantasma — capuz cônico com orbes flutuantes."""
+        cx, cy = w // 2, h // 2
+
+        # Manto base — triângulo arredondado (capuz)
+        pts_manto = [
+            (cx, cy - 15),
+            (cx - 13, cy + 14),
+            (cx + 13, cy + 14),
+        ]
+        pygame.draw.polygon(self.image, (40, 0, 70), pts_manto)
+        pygame.draw.polygon(self.image, (90, 0, 150), pts_manto)
+        pygame.draw.polygon(self.image, (160, 40, 255), pts_manto, width=1)
+
+        # Símbolo de cura no centro (cruz estilizada)
+        pygame.draw.line(self.image, (180, 80, 255), (cx - 5, cy), (cx + 5, cy), 2)
+        pygame.draw.line(self.image, (180, 80, 255), (cx, cy - 5), (cx, cy + 5), 2)
+
+        # Orbes flutuantes ao redor (4 esferas pequenas)
+        for i in range(4):
+            a = math.radians(i * 90 + 45)
+            ox = cx + int(math.cos(a) * 12)
+            oy = cy + int(math.sin(a) * 12)
+            pygame.draw.circle(self.image, (60, 0, 100), (ox, oy), 3)
+            pygame.draw.circle(self.image, (200, 100, 255), (ox, oy), 2)
+
+        # Olho brilhante no centro do capuz
+        pygame.draw.circle(self.image, (255, 180, 255), (cx, cy - 3), 4)
+        pygame.draw.circle(self.image, (80, 0, 120), (cx, cy - 3), 2)
+
+    def update(self, pos_jogador, lista_disparos):
+        # Kiting — mantém distância de segurança
+        d = pos_jogador - self.pos
+        dist = d.length()
+        if dist > 350:
+            self.pos += d.normalize() * self.velocidade
+        elif dist < 200:
+            self.pos -= d.normalize() * self.velocidade
+        self.rect.center = self.pos
+
+        self._tick = getattr(self, "_tick", 0) + 1
+
+        # Pulso visual de cura
+        if self._cura_pulsando > 0:
+            self._cura_pulsando -= 1
+
+        # Timer de cura — guarda referência para main.py via atributo
+        agora = pygame.time.get_ticks()
+        if agora - self._cura_timer > self._cura_cd_ms:
+            self._cura_timer    = agora
+            self._cura_pulsando = 20
+            self._pedido_cura   = True   # main.py lê e reseta
+        
+        # Hit flash
+        if self._flash_timer > 0:
+            if self._cura_pulsando > 0:
+                # Flash verde durante cura
+                flash_verde = pygame.Surface(self._img_original.get_size(), pygame.SRCALPHA)
+                flash_verde.fill((0, 255, 100, 180))
+                self.image        = flash_verde
+            else:
+                self.image        = self._img_flash
+            self._flash_timer -= 1
+        elif self._cura_pulsando > 0:
+            # Glow verde pulsante (sem hit flash)
+            overlay = self._img_original.copy()
+            alpha   = int(120 * (self._cura_pulsando / 20))
+            glow    = pygame.Surface(overlay.get_size(), pygame.SRCALPHA)
+            glow.fill((0, 255, 100, alpha))
+            overlay.blit(glow, (0, 0))
+            angulo = self._angulo_para(pos_jogador)
+            self.image = pygame.transform.rotate(overlay, angulo)
+        else:
+            angulo = self._angulo_para(pos_jogador)
+            self.image = pygame.transform.rotate(self._img_original, angulo)
+        self.rect = self.image.get_rect(center=self.pos)
+
+
+class InimigoExplosivo(InimigoBase):
+    """
+    Laranja: rush direto no jogador e EXPLODE ao chegar perto.
+    Ao morrer (HP ≤ 0) ou ao colidir, emite uma explosão em área.
+    Pulsa em vermelho conforme se aproxima — alerta visual.
+    """
+    RAIO_EXPLOSAO = 90
+    DANO_EXPLOSAO = 30
+
+    def __init__(self, pos_jogador, vel_base):
+        super().__init__(pos_jogador, vel_base * 1.25,
+                         hp=18, cor=(255, 130, 0), tamanho=(28, 28), xp_valor=22)
+        self._explodiu = False
+
+    def _desenhar_forma(self, w, h):
+        """Bomba orgânica — esfera de combustão com veias de plasma."""
+        cx, cy = w // 2, h // 2
+        r = min(w, h) // 2 - 1
+
+        # Corpo esférico com veias de plasma
+        pygame.draw.circle(self.image, (80, 30, 0), (cx, cy), r)
+        pygame.draw.circle(self.image, (200, 80, 0), (cx, cy), r - 2)
+
+        # Veias de plasma (raios irregulares)
+        for i in range(6):
+            a = math.radians(i * 60 + 15)
+            x0 = cx + int(math.cos(a) * 3)
+            y0 = cy + int(math.sin(a) * 3)
+            x1 = cx + int(math.cos(a) * (r - 2))
+            y1 = cy + int(math.sin(a) * (r - 2))
+            pygame.draw.line(self.image, (255, 200, 50), (x0, y0), (x1, y1), 1)
+
+        # Borda de combustão
+        pygame.draw.circle(self.image, (255, 160, 0), (cx, cy), r, width=2)
+
+        # Núcleo brilhante
+        pygame.draw.circle(self.image, (255, 60, 0), (cx, cy), max(2, r // 3))
+        pygame.draw.circle(self.image, (255, 220, 100), (cx, cy), max(1, r // 6))
+
+    def update(self, pos_jogador, lista_disparos):
+        # Rush direto
+        self._mover_para(pos_jogador)
+        self._tick = getattr(self, "_tick", 0) + 1
+
+        # Verificar detonação por proximidade
+        dist = (pos_jogador - self.pos).length()
+        if dist < self.RAIO_EXPLOSAO and not self._explodiu:
+            self._explodiu      = True
+            self._pedido_explosao = True   # main.py lê e processa
+
+        # Pulsa vermelho quanto mais perto do jogador
+        if self._flash_timer > 0:
+            self.image        = self._img_flash
+            self._flash_timer -= 1
+        else:
+            # Intensidade do pulso baseada na proximidade
+            pulso_int = max(0.0, 1.0 - dist / 400)
+            if pulso_int > 0.2:
+                overlay = self._img_original.copy()
+                alpha   = int(180 * pulso_int)
+                glow    = pygame.Surface(overlay.get_size(), pygame.SRCALPHA)
+                glow.fill((255, 50, 0, alpha))
+                overlay.blit(glow, (0, 0))
+                self.image = overlay
+            else:
+                self.image = self._img_original.copy()
+        self.rect = self.image.get_rect(center=self.pos)

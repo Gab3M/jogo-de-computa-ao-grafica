@@ -28,6 +28,12 @@ PLAYER_VEL  = 6
 PLAYER_SIZE = 50
 HP_MAX      = 100
 
+# ── Tamanho responsivo do jogador ────────────────────────────────────────
+# O boneco cresce a cada fase e encolhe ao tomar dano.
+PLAYER_SIZE_MIN          = 30    # menor que o boneco pode ficar (HP ~0)
+PLAYER_CRESCIMENTO_FASE  = 6     # pixels extras por fase concluída
+#   Fase 1 = 50px  |  Fase 5 = 74px  |  Fase 10 = 104px (com HP cheio)
+
 # ── Armas (cadência em ms) ───────────────────────────────────────────────
 CADENCIA_PISTOLA      = 300
 CADENCIA_METRALHADORA = 130
@@ -54,6 +60,8 @@ SHAKE_BOSS_MORTE      = 1.00   # boss morre — maximo absoluto
 SHAKE_LEVEL_UP        = 0.40   # sobe de nivel
 
 # ── Boss ────────────────────────────────────────────────────────────────
-BOSS_FASE_INICIO  = 5    # boss aparece a partir da fase 5
+BOSS_FASE_INICIO  = 5    # primeiro boss na fase 5
+BOSS_INTERVALO    = 5    # boss a cada 5 fases (5, 10, 15...)
+META_FASES        = 15   # total de fases — fase 15 é a última
 BOSS_HP           = 500
 BOSS_TAMANHO      = (70, 70)

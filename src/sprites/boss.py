@@ -27,13 +27,29 @@ class Boss(pygame.sprite.Sprite):
     COR_FASE1 = (200, 0,  50)
     COR_FASE2 = (255, 80, 200)
 
-    def __init__(self, pos_jogador):
+    # Nomes e paletas por nível de boss
+    _NOMES   = {1: "KRONOS",   2: "EREBUS",     3: "NEMESIS"}
+    _CORES_1 = {1: (200, 0, 50), 2: (0, 60, 220), 3: (180, 120, 0)}
+    _CORES_2 = {1: (255, 80, 200), 2: (0, 200, 255), 3: (255, 200, 0)}
+
+    def __init__(self, pos_jogador, nivel_boss: int = 1):
         super().__init__()
-        self.hp       = BOSS_HP
-        self.hp_max   = BOSS_HP
+
+        # Escalonamento por nível: cada boss é visivelmente mais difícil
+        # Nível 1 (fase 5): padrão  |  Nível 2 (fase 10): +60% HP, mais rápido
+        # Nível 3 (fase 15): +150% HP, bullet hell intenso
+        self.nivel_boss = max(1, min(3, nivel_boss))
+        mult_hp  = 1.0 + (self.nivel_boss - 1) * 0.75   # 1.0 / 1.75 / 2.5
+        mult_vel = 1.0 + (self.nivel_boss - 1) * 0.35   # 1.0 / 1.35 / 1.7
+
+        self.hp       = int(BOSS_HP * mult_hp)
+        self.hp_max   = self.hp
         self.estado   = self.FASE1
-        self.xp_valor = 200
-        self.nome     = "KRONOS"
+        self.xp_valor = 200 * self.nivel_boss
+        self.nome     = self._NOMES.get(self.nivel_boss, "KRONOS")
+
+        self.COR_FASE1 = self._CORES_1.get(self.nivel_boss, (200, 0, 50))
+        self.COR_FASE2 = self._CORES_2.get(self.nivel_boss, (255, 80, 200))
 
         self._tick        = 0
         self._angulo_anel = 0.0
@@ -48,13 +64,14 @@ class Boss(pygame.sprite.Sprite):
             math.cos(angulo), math.sin(angulo)) * 800
         self.rect = self.image.get_rect(center=self.pos)
 
-        self.velocidade          = 1.8
+        self.velocidade          = 1.8 * mult_vel
         self.ultimo_tiro_rajada  = 0
-        self.cadencia_rajada     = 1500
+        # Boss nível 3 dispara rajadas mais rápidas
+        self.cadencia_rajada     = max(700, 1500 - (self.nivel_boss - 1) * 300)
         self.angulo_espiral      = 0.0
-        self.vel_espiral         = 4
+        self.vel_espiral         = 4 + (self.nivel_boss - 1) * 2   # espiral mais rápida
         self.ultimo_tiro_espiral = 0
-        self.cadencia_espiral    = 120
+        self.cadencia_espiral    = max(60, 120 - (self.nivel_boss - 1) * 25)
         self.vel_dash            = 0.0
         self.dir_dash            = pygame.math.Vector2(0, 0)
         self.dash_duracao        = 0
@@ -213,7 +230,8 @@ class Boss(pygame.sprite.Sprite):
         self.rect.center = self.pos
         if agora - self.ultimo_tiro_rajada > self.cadencia_rajada:
             self.ultimo_tiro_rajada = agora
-            self._disparar_estrela(lista_disparos, n_balas=8, cor=VERMELHO)
+            n_balas = 8 + (self.nivel_boss - 1) * 3   # 8 / 11 / 14 balas
+            self._disparar_estrela(lista_disparos, n_balas=n_balas, cor=self.COR_FASE1)
 
     def _update_fase2(self, pos_jogador, lista_disparos, agora):
         if self.dash_duracao > 0:
@@ -224,7 +242,8 @@ class Boss(pygame.sprite.Sprite):
             d = pos_jogador - self.pos
             if d.length() > 0:
                 self.pos += d.normalize() * self.velocidade * 1.6
-            if random.random() < 0.003:
+            dash_chance = 0.003 + (self.nivel_boss - 1) * 0.002
+            if random.random() < dash_chance:
                 self._iniciar_dash(pos_jogador)
         self.rect.center = self.pos
         if agora - self.ultimo_tiro_espiral > self.cadencia_espiral:
@@ -232,7 +251,8 @@ class Boss(pygame.sprite.Sprite):
             self._disparar_espiral(lista_disparos)
         if agora - self.ultimo_tiro_rajada > self.cadencia_rajada * 0.7:
             self.ultimo_tiro_rajada = agora
-            self._disparar_estrela(lista_disparos, n_balas=12, cor=ROSA)
+            n_balas = 12 + (self.nivel_boss - 1) * 4   # 12 / 16 / 20 balas
+            self._disparar_estrela(lista_disparos, n_balas=n_balas, cor=self.COR_FASE2)
 
     def _disparar_estrela(self, lista_disparos, n_balas=8, cor=VERMELHO):
         for i in range(n_balas):
