@@ -223,7 +223,7 @@ class Game:
             "hp_max": self.player.hp_max,
             "arma_equipada": self.player.tipo_arma if hasattr(self.player, 'tipo_arma') else "pistola",
             "upgrades": list(self.menu_up.upgrades_adquiridos),
-            "score": self.score.score_atual,
+            "score": self.score.score,
             "combo": self.score.combo,
             "xp_atual": self.player.xp if hasattr(self.player, 'xp') else 0,
             "timestamp": pygame.time.get_ticks(),
@@ -245,7 +245,7 @@ class Game:
         self.player.hp = dados.get("hp_jogador", self.player.hp_max)
         self.player.hp_max = dados.get("hp_max", HP_MAX)
         self.menu_up.upgrades_adquiridos = set(dados.get("upgrades", []))
-        self.score.score_atual = dados.get("score", 0)
+        self.score.score = dados.get("score", 0)
         self.score.combo = dados.get("combo", 0)
         
         # Aplicar upgrades ao jogador se houver
@@ -1065,7 +1065,7 @@ class Game:
         self.tela.blit(self.fonte.render(info, True, BRANCO), (30, 28 + 20 + 4 + 8 + 8))
 
         # ── Score / Combo (desenhar contador animado) ──────────────────────
-        txt_score = self.fonte_md.render(f"SCORE: {self.score.score_atual:,}", True, (200, 200, 0))
+        txt_score = self.fonte_md.render(f"SCORE: {self.score.score:,}", True, (200, 200, 0))
         self.tela.blit(txt_score, (LARGURA - txt_score.get_width() - 20, 20))
         
         # ── Combo com cor dinâmica ────────────────────────────────────────
